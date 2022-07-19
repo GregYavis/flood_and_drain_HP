@@ -14,6 +14,14 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 int floodValue = 0;
 int drainValue = 0;
 int curValue = 0;
+int columnsLCD = 16;
+char* MenuLine[] = {"Turn on/off", "Set propeties"};
+int CursorLine = 0;
+
+bool inMenu = true;
+bool turnPumpSelected = false;
+bool setPumpSelected = false;
+
 boolean FDFlag = true;
 boolean backlState = true;
 uint32_t backlTimer;
@@ -25,6 +33,13 @@ void swapValues(int& first, int& second) {
 }
 
 
+void drawMainMenu() {
+
+}
+
+void drawFloodAndDrainMenu() {
+
+}
 
 void getCurVariable() {
   if (FDFlag == true) {
@@ -33,6 +48,23 @@ void getCurVariable() {
   if (FDFlag == false) {
     curValue = drainValue;
   }
+}
+void backlOn() {
+  backlState = true;
+  backlTimer = millis();
+  lcd.backlight();
+}
+void printMenu() {
+  backlOn();
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("    Menu    ");
+  lcd.setCursor(0, 1);
+  lcd.print(">");
+  lcd.setCursor(columnsLCD - 1, 1); 
+
+  lcd.setCursor(1, 1);
+  lcd.print(MenuLine[CursorLine]);
 }
 
 void setup() {
@@ -43,20 +75,7 @@ void setup() {
   lcd.setCursor(0, 0);
   //lcd.print("TEST STRINg");
   enc1.setType(TYPE1);
-}
-
-void backlTick() {
-  if (LCD_BACKL && backlState && millis() - backlTimer >= BACKL_TOUT * 1000) {
-    backlState = false;
-    lcd.noBacklight();
-    //lcd.clear();
-  }
-}
-
-void backlOn() {
-  backlState = true;
-  backlTimer = millis();
-  lcd.backlight();
+  printMenu();
 }
 
 void updateLCD() {
@@ -77,39 +96,168 @@ void updateLCD() {
 
 void encoderTick() {
   enc1.tick();
-  if (enc1.isTurn()){
-    if (backlState) {
-      backlTimer = millis();
-      getCurVariable();
-      if (enc1.isRight()) {
-        curValue++;
-        updateLCD();
+  if (!inMenu) 
+  {
+    if (enc1.isTurn())
+    {
+      if (backlState) 
+      {
+        backlTimer = millis();
+        getCurVariable();
+        if (enc1.isRight()) 
+        {
+          curValue++;
+          updateLCD();
+        }
+        if (enc1.isLeft()) 
+        {
+          curValue--;
+          updateLCD();
+        }
       }
-      if (enc1.isLeft()) {
-        curValue--;
-        updateLCD();
+      else 
+      {
+        backlOn();
       }
-
-    } else {backlOn();}
+    }
+    if (enc1.isClick()) 
+    {
+      backlOn();
+      FDFlag = not FDFlag;
+      if (backlState)
+      {
+        if (FDFlag == true) 
+        {
+          swapValues(floodValue, curValue);
+          updateLCD();
+        }
+        else if (FDFlag == false) 
+        {
+          swapValues(drainValue, curValue);
+          updateLCD();
+        }
+      }
+    }   
     
   }
-  if (enc1.isClick()) {
-    backlOn();
-    FDFlag = not FDFlag;
-    if (backlState) {
-      if (FDFlag == true) {
-        swapValues(floodValue, curValue);
+  if (inMenu)
+  {
+    if (enc1.isTurn()) {
+      if (enc1.isRight() && CursorLine != 1) 
+      {
+        CursorLine++;
+        if (CursorLine >= 1) {
+          CursorLine = 1;
+          printMenu();
         }
-      else if (FDFlag == false) {
-        swapValues(drainValue, curValue);
+      }
+      else if (enc1.isLeft() && CursorLine != 0) {
+        CursorLine--;
+        if (CursorLine <= 0) {
+          CursorLine = 0;
+          printMenu();
         }
-      updateLCD();
+      }
+    else backlOn();
     }
-  }     
+    if (enc1.isClick()) 
+    {
+      backlOn();
+      switch (CursorLine)
+      {
+      case 1:
+        /* code */
+        setPumpSelected = true;
+        turnPumpSelected = false;
+        inMenu = false;
+        updateLCD();
+        break;
+      
+      case 0:
+        setPumpSelected = false;
+        turnPumpSelected = true;
+        inMenu = false;
+        break;
+      }
+    }  
+  
+  }
+  if (enc1.isHolded())
+    {
+      inMenu = true;
+      setPumpSelected = false;
+      turnPumpSelected = false;
+      printMenu();
+    }  
 }
+
+void selectorMenu() {
+  enc1.tick();
+  if (enc1.isTurn() && inMenu) {
+    if (enc1.isRight() && CursorLine != 1) {
+      CursorLine++;
+      if (CursorLine >= 1) {
+        CursorLine = 1;
+        printMenu();
+      }
+    }
+    else if (enc1.isLeft() && CursorLine != 0) {
+      CursorLine--;
+      if (CursorLine <= 0) {
+        CursorLine = 0;
+        printMenu();
+      }
+    }
+    else backlOn();
+  }
+  if (enc1.isClick() && inMenu) 
+  {
+    backlOn();
+    switch (CursorLine)
+    {
+    case 1:
+      /* code */
+      setPumpSelected = true;
+      turnPumpSelected = false;
+      inMenu = false;
+      updateLCD();
+      break;
+    
+    case 0:
+      setPumpSelected = false;
+      turnPumpSelected = true;
+      inMenu = false;
+      break;
+    }
+  }  
+  if (enc1.isHolded() && inMenu)
+  {
+    inMenu = true;
+    setPumpSelected = false;
+    turnPumpSelected = false;
+    printMenu();
+  }  
+}
+
+
+
+void backlTick() {
+  if (LCD_BACKL && backlState && millis() - backlTimer >= BACKL_TOUT * 1000) {
+    backlState = false;
+    lcd.noBacklight();
+    //lcd.clear();
+  }
+}
+
+
+
+
+
+
 
 void loop() {
   // put your main code here, to run repeatedly:
+  //encoderTick();
   encoderTick();
   backlTick();
 }
