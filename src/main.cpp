@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <LiquidCrystal_I2C.h>
 #include "GyverEncoder.h"
+#include <ezOutput.h>
 
 #define PIN_ROTARY_CLK 5
 #define PIN_ROTARY_DT 4
@@ -10,13 +11,13 @@
 
 Encoder enc1(5, 4, 3);
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-
-int floodValue = 0;
-int drainValue = 0;
-
+ezOutput led(A3);
+int floodValue = 200; //turn pump on to time in seconds
+int drainValue = 1200; // turn pump off to time in seconds (20 min)
+long floodOnceADay[] = {200, 43000}; // thats to option turn pump one once a 12 hours
 int columnsLCD = 16;
 
-const char* MenuLine[] = {"Turn on/off", "Set propeties"};
+const char* MenuLine[] = {"Turn on/off", "Set propeties", "Once per 12h"};
 int CursorLine = 0;
 
 const char* PumpMenuLine[] = {"Flood time: ", "Drain time: "};
@@ -34,8 +35,11 @@ bool drainSelector = false;
 bool swapOn = true;
 boolean turnFlag = false;
 boolean backlState = true;
-uint32_t backlTimer;
+bool onceTwelveHours = false;
 
+unsigned long time=0;
+uint32_t backlTimer;
+int step = 5;
 
 void backlOn() {
   backlState = true;
@@ -135,23 +139,14 @@ void drawMainMenu() {
     {
       drawPumpSettings();
     }
-    //if (setPumpCursor && !turmPumpCursor)
-    //{
-    //  lcd.print(MenuLine[0]);
-    //  lcd.setCursor(0, 1);
-    //  lcd.print(">");
-    //  lcd.print(MenuLine[1]);
-    //}
-    //else if (!setPumpCursor && turmPumpCursor)
-   // {
-   //   lcd.print(">");
-   //   lcd.print(MenuLine[0]);
-   //   lcd.setCursor(0, 1);
-   //   lcd.print(MenuLine[1]);
-   // }
-
 }
-
+void setOnceTwelveHours() {
+  floodValue = floodOnceADay[0];
+  drainValue = floodOnceADay[1];
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print('Settings updated');
+}
 void mainMenuTracer () {
   enc1.tick();
   // Возвращаемся в главное меню
@@ -163,8 +158,11 @@ void mainMenuTracer () {
     swapOn = true;
     floodSelector = false;
     drainSelector = false;
+
+    //led.high();
     drawMainMenu();
   }
+
   // Включаем екран в любом меню при клике или повороте енкодера если он выключен
   if (!backlState)
   {
@@ -181,7 +179,7 @@ void mainMenuTracer () {
       if (enc1.isRight())
       {
       CursorLine++;
-      if (CursorLine > 1)
+      if (CursorLine > 2)
       {
         CursorLine = 0;
       }
@@ -203,6 +201,10 @@ void mainMenuTracer () {
       if (backlState)
       {      
         inMenu = false;
+        if (CursorLine == 2)
+        {
+          setOnceTwelveHours();
+        }
         if (CursorLine == 1)
         {
           setPumpSelected = true;
@@ -248,17 +250,29 @@ void mainMenuTracer () {
       }
       if (!swapOn)
       { 
+          if (enc1.isDouble())
+          {
+            if (step == 5)
+            {
+              step = 30;
+            }
+            else if (step == 30)
+            {
+              step = 5;
+            }
+            
+          }
         if (floodSelector && !drainSelector)
         { 
           enc1.tick();
           if (enc1.isRight())
           {
-            floodValue++;
+            floodValue += step;
             drawPumpSettings();
           }
           if (enc1.isLeft())
           {
-            floodValue--;
+            floodValue -= step;
             if (floodValue < 0)
             {
               floodValue = 0;
@@ -282,12 +296,12 @@ void mainMenuTracer () {
           enc1.tick();
           if (enc1.isRight())
           {
-            drainValue++;
+            drainValue += step;
             drawPumpSettings();
           }
           if (enc1.isLeft())
           {
-            drainValue--;
+            drainValue -= step;
             if (drainValue < 0)
             {
               drainValue = 0;
@@ -322,20 +336,28 @@ void mainMenuTracer () {
       {
         if (turnFlag)
         {
-          Serial.println("MUST ON");
-          Serial.println(turnFlag);
-          digitalWrite(A3, LOW);
-        }
-        if (!turnFlag)
-        {
-          Serial.println("MUST OFF");
-          Serial.println(turnFlag);
-          digitalWrite(A3, HIGH);
+          
+            if (!inMenu && floodValue != 0 && drainValue != 0)
+            {
+              led.blink(floodValue * 1000, drainValue * 1000);
+              Serial.println(floodValue * 100);
+              Serial.println("\n");
+              Serial.println(time);
+            }
+          }
+          if (!turnFlag)
+          {
+            led.high();
+            //led.blink(0, 0);
+            Serial.println("MUST OFF");
+            Serial.println(turnFlag);
+
+          }
         }
       } 
     }
   }
-}
+
 
 
 void setup() {
@@ -344,7 +366,6 @@ void setup() {
   lcd.init();
   lcd.backlight();
   lcd.setCursor(0, 0);
-  //lcd.print("TEST STRINg");
   pinMode(A3, OUTPUT);
   digitalWrite(A3, HIGH);
   enc1.setType(TYPE1);
@@ -364,6 +385,8 @@ void backlTick() {
 void loop() {
   // put your main code here, to run repeatedly:
   //encoderTick();
+  led.loop();
   mainMenuTracer();
   backlTick();
+
 }
